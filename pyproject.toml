@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "hsr_sim"
+version = "0.1.0"
+description = ""
+authors = ["Maximilian Neudert <max@neudert.me>"]
+readme = "README.md"
+packages = [{include = "*", from="src"}]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+pandas = "^2.2"
+scipy = "^1.13"
+streamlit = "^1.35"
+numpy = "1.26.4"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
