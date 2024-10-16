@@ -2,6 +2,8 @@ import streamlit as st
 from scipy.stats import binom
 import numpy as np
 import pandas as pd
+import plotly.express as px
+import plotly.figure_factory as ff
 
 st.set_page_config(layout="wide")
 
@@ -19,6 +21,10 @@ def gen_p_lc():
 
 def p_bernoulli(p, n):
   return 1 - (1 - p) ** n
+
+def normal_dist(x , mean , sd):
+    prob_density = np.exp(-0.5*((x-mean)/sd)**2) / np.sqrt(np.pi * sd**2)
+    return prob_density
 
 def gen_cum_drop_chances(v):
     cum_drop_chances = []
@@ -106,26 +112,135 @@ def gui():
     
     st.write(f'## Simulator: Pull Calculator')
     # setup simulation
-    row_pullcalc1 = st.columns(5)
+    row_pullcalc1 = st.columns(3)
     with row_pullcalc1[0]:
-        pullcalc_guranteed = st.selectbox(
-            "Guranteed?",
+        pullcalc_guranteed_char = st.selectbox(
+            "Guranteed Char?",
             (False, True),
             index=0,
         )
     with row_pullcalc1[1]:
-        n_pullcalc_pity = st.number_input('Pity:', value=0)
+        n_pullcalc_pity_char = st.number_input('Pity Char:', value=0)
     with row_pullcalc1[2]:
-        n_pullcalc_limited_chars = st.number_input('Limited Chars:', value=0)
-    with row_pullcalc1[3]:
-        n_pullcalc_limited_lcs = st.number_input('Limited LCs:', value=0)
-    with row_pullcalc1[4]:
-        btn_pullcalc_run = st.button("Run", type="primary", key='btn_pullcalc_run')
+        n_pullcalc_limited_char = st.number_input('Limited Chars:', value=0)
+    row_pullcalc2 = st.columns(3)
+    with row_pullcalc2[0]:
+        pullcalc_guranteed_lc = st.selectbox(
+            "Guranteed LC?",
+            (False, True),
+            index=0,
+        )
+    with row_pullcalc2[1]:
+        n_pullcalc_pity_lc = st.number_input('Pity LC:', value=0)
+    with row_pullcalc2[2]:
+        n_pullcalc_limited_lc = st.number_input('Limited LCs:', value=0)
+    btn_pullcalc_run = st.button("Run", type="primary", key='btn_pullcalc_run')
     # run simulation
     if btn_pullcalc_run:
+        result = []
         for idx_sim in range(10**5):
-            True
-            # continue here
+            n_pulls_total = 0
+            # (1) pull Chars
+            p = gen_p_char()
+            p_limited = 0.5
+            # gacha simulation
+            guranteed = pullcalc_guranteed_char
+            n_plulls = 0
+            n_limited = 0
+            pity = n_pullcalc_pity_char > 0
+            while n_limited < n_pullcalc_limited_char:
+                if pity == True:
+                    p_pity = p[n_pullcalc_pity_char:]
+                    rolls = np.random.rand(len(p_pity))
+                    drops = rolls <= p_pity
+                    pity = False
+                else:
+                    rolls = np.random.rand(len(p))
+                    drops = rolls <= p
+                idx = find_success_index(drops)
+                # check if 5⭐ dropped
+                n_until_drop = idx + 1
+                win5050 = np.random.rand() < p_limited
+                if not guranteed and not win5050:
+                    guranteed = True
+                    n_plulls += len(drops)
+                else:
+                    n_limited += 1
+                    guranteed = False
+                    n_plulls += n_until_drop
+            n_pulls_total += n_plulls
+            # (2) pull LCs
+            p = gen_p_lc()
+            p_limited = 0.75
+            # gacha simulation
+            guranteed = pullcalc_guranteed_lc
+            n_plulls = 0
+            n_limited = 0
+            pity = n_pullcalc_pity_lc > 0
+            while n_limited < n_pullcalc_limited_lc:
+                if pity == True:
+                    p_pity = p[n_pullcalc_pity_lc:]
+                    rolls = np.random.rand(len(p_pity))
+                    drops = rolls <= p_pity
+                    pity = False
+                else:
+                    rolls = np.random.rand(len(p))
+                    drops = rolls <= p
+                idx = find_success_index(drops)
+                # check if 5⭐ dropped
+                n_until_drop = idx + 1
+                win5050 = np.random.rand() < p_limited
+                if not guranteed and not win5050:
+                    guranteed = True
+                    n_plulls += len(drops)
+                else:
+                    n_limited += 1
+                    guranteed = False
+                    n_plulls += n_until_drop
+            n_pulls_total += n_plulls
+            # add counts to result
+            result_step = {'idx_sim': idx_sim+1, 'n_pulls': n_pulls_total}
+            result.append(result_step)
+        ###
+        ### stats
+        ###
+        df = pd.DataFrame(result)
+        mean = df['n_pulls'].mean()
+        sd = df['n_pulls'].std()
+        box_lower = np.percentile(df['n_pulls'], 25)
+        box_upper = np.percentile(df['n_pulls'], 75)
+        min = df['n_pulls'].min()
+        max = df['n_pulls'].max()
+        # plot
+        fig_pdf = ff.create_distplot([df['n_pulls']], group_labels=['n_pulls'],
+                                     show_hist=False, show_rug=False)
+        fig_pdf.add_vline(x=mean, line_width=3, line_dash="solid", line_color="red",
+                           annotation_text=f"mean: {mean:.0f} pulls", annotation_position="top left",
+                           annotation=dict(font_size=16, font_family="Roboto"))
+        fig_pdf.add_vrect(x0=min, x1=mean,
+                           annotation_text="best 50%", annotation_position="bottom right",
+                           fillcolor="green", opacity=0.25, line_width=0)
+        fig_pdf.add_vrect(x0=mean, x1=max,
+                           annotation_text="worst 50%", annotation_position="bottom left",
+                           fillcolor="red", opacity=0.25, line_width=0)
+        fig_pdf.update_layout(showlegend=False)
+        st.plotly_chart(fig_pdf, key="pulls_pdf", on_select="ignore")
+        fig_ecdf = px.ecdf(df, x="n_pulls", title='Pulls: Empirical Cumulative Distribution Function')
+        fig_ecdf.add_vline(x=mean, line_width=3, line_dash="solid", line_color="red",
+                           annotation_text=f"mean: {mean:.0f} pulls", annotation_position="top left",
+                           annotation=dict(font_size=16, font_family="Roboto"))
+        p_90 = np.percentile(df['n_pulls'], 90)
+        fig_ecdf.add_vline(x=p_90, line_width=3, line_dash="solid", line_color="red",
+                           annotation_text=f"90%: {p_90:.0f} pulls", annotation_position="top left",
+                           annotation=dict(font_size=16, font_family="Roboto"))
+        p_100 = np.percentile(df['n_pulls'], 100)
+        fig_ecdf.add_vline(x=p_100, line_width=3, line_dash="solid", line_color="red",
+                           annotation_text=f"100%: {p_100:.0f} pulls", annotation_position="bottom left",
+                           annotation=dict(font_size=16, font_family="Roboto"))
+        fig_ecdf.add_vrect(x0=box_lower, x1=box_upper,
+                           annotation_text="50% confidence", annotation_position="bottom left",
+                           fillcolor="green", opacity=0.25, line_width=0)
+        st.plotly_chart(fig_ecdf, key="pulls_ecdf", on_select="ignore")
     
     
     st.write(f'## Simulator: Limited 5⭐ Average Pull Count')
